@@ -1,3 +1,4 @@
+// /app/encrypt/page.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -13,6 +14,7 @@ import {
   Check,
   ShieldCheck,
   ShieldOff,
+  Download,
 } from 'lucide-react';
 import zxcvbn from 'zxcvbn';
 
@@ -23,16 +25,16 @@ export default function EncryptPage() {
   const [file, setFile] = useState<File | null>(null);
   const [textInput, setTextInput] = useState('');
   const [encryptType, setEncryptType] = useState<EncryptType>('file');
-
   const [usePassword, setUsePassword] = useState(true);
   const [password, setPassword] = useState('');
-
   const [passwordScore, setPasswordScore] = useState(0);
   const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
-  const [statusText, setStatusText] = useState('Waiting for file and password...');
+  const [statusText, setStatusText] = useState('Menunggu file dan password...');
   const [statusType, setStatusType] = useState<StatusType>('idle');
   const [outputCode, setOutputCode] = useState('');
   const [showCopyAlert, setShowCopyAlert] = useState(false);
+
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const workerRef = useRef<Worker | null>(null);
 
@@ -48,8 +50,17 @@ export default function EncryptPage() {
         setStatusText(message);
       } else if (type === 'success' && action === 'encrypt') {
         setOutputCode(payload.code);
-        setStatusText('Encryption successful! Copy the code below.');
+        setStatusText('Enkripsi berhasil! Salin kode atau download file .txt.');
         setStatusType('success');
+
+        try {
+          const blob = new Blob([payload.code], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          setDownloadUrl(url);
+        } catch (err) {
+          console.error('Failed to create download URL:', err);
+        }
+
       } else if (type === 'error') {
         setStatusText(`ERROR: ${message}`);
         setStatusType('error');
@@ -60,6 +71,14 @@ export default function EncryptPage() {
       workerRef.current?.terminate();
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (downloadUrl) {
+        URL.revokeObjectURL(downloadUrl);
+      }
+    };
+  }, [downloadUrl]);
 
   const getStatusColor = () => {
     switch (statusType) {
@@ -105,16 +124,21 @@ export default function EncryptPage() {
 
   const copyToClipboard = () => {
     if (!outputCode || showCopyAlert) return;
-    navigator.clipboard.writeText(outputCode);
-    setShowCopyAlert(true);
-    setStatusText('Code copied to clipboard!');
-    setStatusType('success');
-    setTimeout(() => {
-      setShowCopyAlert(false);
-      if (statusType === 'success') {
-        setStatusText('Encryption successful! Copy the code below.');
-      }
-    }, 2000);
+    navigator.clipboard.writeText(outputCode).then(() => {
+      setShowCopyAlert(true);
+      setStatusText('Kode disalin ke clipboard!');
+      setStatusType('success');
+      setTimeout(() => {
+        setShowCopyAlert(false);
+        if (statusType === 'success') {
+          setStatusText('Enkripsi berhasil! Salin kode atau download file .txt.');
+        }
+      }, 2000);
+    }).catch(err => {
+      console.error('Failed to copy text:', err);
+      setStatusText('ERROR: Gagal menyalin. Kode mungkin terlalu besar. Gunakan tombol download.');
+      setStatusType('error');
+    });
   };
 
   const handleEncrypt = async () => {
@@ -122,13 +146,12 @@ export default function EncryptPage() {
       (encryptType === 'file' && !file) ||
       (encryptType === 'text' && !textInput)
     ) {
-      setStatusText('ERROR: File or Text cannot be empty.');
+      setStatusText('ERROR: File atau Teks tidak boleh kosong.');
       setStatusType('error');
       return;
     }
-
     if (usePassword && !password) {
-      setStatusText('ERROR: Password cannot be empty if protection is enabled.');
+      setStatusText('ERROR: Password tidak boleh kosong jika proteksi diaktifkan.');
       setStatusType('error');
       return;
     }
@@ -136,24 +159,28 @@ export default function EncryptPage() {
     setStatusType('loading');
     setOutputCode('');
 
+    if (downloadUrl) {
+      URL.revokeObjectURL(downloadUrl);
+    }
+    setDownloadUrl(null);
+
     try {
       let fileBuffer: ArrayBuffer;
       let filename: string;
       let fileType: string;
-
       if (encryptType === 'file' && file) {
-        setStatusText('Reading file...');
+        setStatusText('Membaca file...');
         fileBuffer = await file.arrayBuffer();
         filename = file.name;
         fileType = file.type || 'application/octet-stream';
       } else {
-        setStatusText('Encoding text...');
+        setStatusText('Encoding teks...');
         fileBuffer = new TextEncoder().encode(textInput).buffer;
-        filename = 'message.txt';
+        filename = 'pesan.txt';
         fileType = 'text/plain';
       }
 
-      setStatusText('Sending data to worker...');
+      setStatusText('Mengirim data ke worker...');
       workerRef.current?.postMessage(
         {
           action: 'encrypt',
@@ -173,177 +200,195 @@ export default function EncryptPage() {
       setStatusType('error');
     }
   };
-
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="text-3xl font-bold">Encrypt Data</h1>
+          <h1 className="text-3xl font-bold">Enkripsi Data</h1>
           <p className="text-gray-400">
-            Secure your file or text with a password.
+            Amankan file atau teks Anda dengan password.
           </p>
         </div>
+      
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-gray-300 hover:text-white transition-colors px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back
+          Kembali
         </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 lg:gap-16">
-        <div className="space-y-8">
-          
+        <div 
+className="space-y-8">
           <div>
             <label className="block mb-3 text-lg font-medium text-gray-300">
-              Data Type
+              Tipe Data
             </label>
             <div className="grid grid-cols-2 gap-4">
+              
               <button
                 onClick={() => setEncryptType('file')}
                 className={`flex items-center justify-center gap-3 p-4 rounded-lg border-2 transition-all ${
                   encryptType === 'file'
-                    ? 'bg-blue-600/20 border-blue-500'
+                    ?
+'bg-blue-600/20 border-blue-500'
                     : 'bg-gray-800 border-gray-700 hover:border-gray-500'
                 }`}
               >
                 <FileUp className="w-5 h-5" />
                 <span className="font-medium">File</span>
+          
               </button>
               <button
                 onClick={() => setEncryptType('text')}
                 className={`flex items-center justify-center gap-3 p-4 rounded-lg border-2 transition-all ${
                   encryptType === 'text'
-                    ? 'bg-blue-600/20 border-blue-500'
+                    
+? 'bg-blue-600/20 border-blue-500'
                     : 'bg-gray-800 border-gray-700 hover:border-gray-500'
                 }`}
               >
                 <FileText className="w-5 h-5" />
-                <span className="font-medium">Text</span>
+                <span className="font-medium">Teks</span>
+          
               </button>
             </div>
           </div>
 
-          
-          {encryptType === 'file' ? (
+          {encryptType === 'file' ?
+(
             <div>
               <label
                 htmlFor="file-upload"
                 className="block mb-3 text-lg font-medium text-gray-300"
               >
-                Select File
-              </label>
+                Pilih File
+          
+          </label>
               <label
                 htmlFor="file-upload"
                 className="w-full flex items-center gap-3 px-6 py-5 bg-gray-800 border-2 border-dashed border-gray-700 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-gray-700/ ৫০ transition-colors"
               >
-                <FileUp className="w-6 h-6 text-blue-400" />
+                <FileUp className="w-6 
+h-6 text-blue-400" />
                 <span className="text-lg text-gray-300 truncate">
-                  {file ? file.name : 'Click to select a file...'}
+                  {file ? file.name : 'Klik untuk memilih file...'}
                 </span>
               </label>
               <input
-                id="file-upload"
+          
+          id="file-upload"
                 type="file"
                 className="hidden"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
               />
             </div>
           ) : (
-            <div>
-              <label
-                htmlFor="text-input"
-                className="block mb-3 text-lg font-medium text-gray-300"
-              >
-                Enter Text
-              </label>
-              <textarea
-                id="text-input"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                className="w-full h-40 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
-                placeholder="Paste your secret text here..."
-              />
-            </div>
+    
+          <div>
+            <label
+              htmlFor="text-input"
+              className="block mb-3 text-lg font-medium text-gray-300"
+            >
+              Masukkan Teks
+            
+          </label>
+            <textarea
+              id="text-input"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              className="w-full h-40 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
+        
+          placeholder="Tempelkan teks rahasia Anda di sini..."
+            />
+          </div>
           )}
           
-          
           <div className="space-y-4">
+            
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 className="w-5 h-5 rounded text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-600"
                 checked={usePassword}
                 onChange={(e) => setUsePassword(e.target.checked)}
-              />
+          
+          />
               <span className="text-lg font-medium text-gray-300">
-                Protect with Password
+                Proteksi dengan Password
               </span>
-              {usePassword ? (
+              {usePassword ?
+(
                   <ShieldCheck className="w-5 h-5 text-green-400" />
                 ) : (
                   <ShieldOff className="w-5 h-5 text-gray-500" />
                 )}
             </label>
 
-            
             {usePassword && (
               <div className="animate-in fade-in duration-300 space-y-3">
                 <div className="relative">
                   <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <input
-                    id="password-enc"
+    
+                  id="password-enc"
                     type="password"
                     value={password}
                     onChange={(e) => handlePasswordChange(e.target.value)}
-                    className="w-full pl-14 pr-6 py-4 bg-gray-800 border border-gray-700 rounded-lg text-lg focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
-                    placeholder="Enter a strong password..."
+                    className="w-full 
+pl-14 pr-6 py-4 bg-gray-800 border border-gray-700 rounded-lg text-lg focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Masukkan password yang kuat..."
                   />
                 </div>
                 {password.length > 0 && (
-                  <div className="space-y-2">
+          
+          <div className="space-y-2">
                     <div className="w-full bg-gray-700 rounded-full h-2">
                       <div
                         className={`h-2 rounded-full transition-all ${getPasswordColor()}`}
-                        style={{ width: `${(passwordScore + 1) * 20}%` }}
+          
+          style={{ width: `${(passwordScore + 1) * 20}%` }}
                       ></div>
                     </div>
                     {passwordFeedback && (
                       <p className="text-sm text-yellow-400">
+          
                         {passwordFeedback}
                       </p>
                     )}
                   </div>
                 )}
+          
               </div>
             )}
             
-            
             {!usePassword && (
               <p className="text-sm text-gray-400 animate-in fade-in duration-300">
-                Encryption will be created without a password. Anyone with the code can open it.
+                Enkripsi akan dibuat tanpa password.
+Siapapun yang memiliki kode dapat membukanya.
               </p>
             )}
           </div>
-          
-
-
           <button
             onClick={handleEncrypt}
             disabled={statusType === 'loading'}
+  
             className="w-full flex items-center justify-center gap-3 px-6 py-5 bg-blue-600 rounded-lg font-semibold text-white text-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:text-gray-400 transition-all duration-300"
           >
             <Zap className="w-5 h-5" />
-            {statusType === 'loading' ? 'Processing...' : 'Start Encryption'}
+            {statusType === 'loading' ?
+'Memproses...' : 'Mulai Enkripsi'}
           </button>
 
           <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 mt-6">
             <label className="text-sm font-medium text-gray-300">
-              Process Status:
+              Status Proses:
             </label>
             <p
-              className={`mt-2 font-mono text-sm ${getStatusColor()}`}
+              className={`mt-2 font-mono text-sm 
+${getStatusColor()}`}
               style={{ minHeight: '1.25rem' }}
             >
               {statusText}
@@ -351,60 +396,79 @@ export default function EncryptPage() {
           </div>
         </div>
 
-        
-        <div className="flex flex-col mt-12 lg:mt-0">
+        <div className="flex flex-col mt-12 
+lg:mt-0">
           <label
             htmlFor="output-code"
             className="block mb-3 text-lg font-medium text-gray-300"
           >
-            Generated Base64 Code
+            Kode Base64 Dihasilkan
           </label>
 
           <div className="relative w-full h-full flex-grow">
-            {!outputCode && (
+            {!outputCode && 
+(
               <div className="w-full h-full min-h-[500px] flex items-center justify-center rounded-lg bg-gray-800/50 border border-dashed border-gray-700">
                 <div className="text-center">
                   <Package className="w-12 h-12 text-gray-600 mx-auto" />
                   <p className="mt-2 text-gray-500">
-                    The Base64 code will appear here...
+              
+                    Kode Base64 akan muncul di sini...
                   </p>
                 </div>
               </div>
             )}
 
             {outputCode && (
-              <div className="relative w-full h-full">
+              <div className="relative 
+w-full h-full">
                 <textarea
                   id="output-code"
                   readOnly
                   value={outputCode}
-                  className="w-full h-full min-h-[500px] p-4 rounded-lg bg-gray-900 border border-gray-700 font-mono text-xs text-gray-300 focus:outline-none"
+                  className="w-full h-full min-h-[500px] p-4 rounded-lg bg-gray-900 border border-gray-700 font-mono text-xs text-gray-300 
+focus:outline-none"
                 />
                 
-                <button
-                  onClick={copyToClipboard}
-                  title="Copy Code"
-                  className="absolute top-4 right-4 p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
-                  disabled={showCopyAlert}
-                >
-                  {showCopyAlert ? (
-                    <Check className="w-5 h-5 text-green-400" />
-                  ) : (
-                    <Copy className="w-5 h-5 text-gray-300" />
+                <div className="absolute top-4 right-4 flex flex-col gap-3">
+                  <button
+                    onClick={copyToClipboard}
+                    title="Salin Kode"
+                    className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+                    disabled={showCopyAlert}
+                  >
+                    {showCopyAlert ? (
+                      <Check className="w-5 h-5 text-green-400" />
+                    ) : (
+                      <Copy className="w-5 h-5 text-gray-300" />
+                    )}
+                  </button>
+                  
+                  {/* Tombol Download, hanya muncul jika URL-nya ada */}
+                  {downloadUrl && (
+                    <a
+                      href={downloadUrl}
+                      download="kode_enkripsi.txt" 
+                      title="Download Kode sebagai .txt"
+                      className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+                    >
+                      <Download className="w-5 h-5 text-gray-300" />
+                    </a>
                   )}
-                </button>
+                </div>
                 
                 {showCopyAlert && (
                   <div 
                     className="absolute top-16 right-4 px-3 py-1 bg-green-600 text-white text-sm rounded-md shadow-lg"
                   >
-                    Copied!
+                    Disalin!
                   </div>
                 )}
               </div>
             )}
           </div>
-        </div>
+        
+</div>
       </div>
     </div>
   );

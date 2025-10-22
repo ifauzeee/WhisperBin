@@ -1,4 +1,3 @@
-'use client';
 export const bufferToBase64URL = (buffer: ArrayBuffer) => {
   const bytes = new Uint8Array(buffer);
   const len = bytes.byteLength;
@@ -38,7 +37,7 @@ export const deriveKey = async (
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: salt,
+      salt: salt.buffer as ArrayBuffer,
       iterations: 100000,
       hash: 'SHA-256',
     },

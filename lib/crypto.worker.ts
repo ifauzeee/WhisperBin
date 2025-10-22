@@ -17,7 +17,6 @@ const handleEncrypt = async (payload: {
   password: string;
 }) => {
   const { fileBuffer, filename, fileType, password } = payload;
-  
   let key: CryptoKey;
   let b64SaltOrKey: string;
   let prefix: 'P' | 'K';
@@ -28,10 +27,8 @@ const handleEncrypt = async (payload: {
     prefix = 'P';
     postStatus('Mempersiapkan salt...');
     const salt = crypto.getRandomValues(new Uint8Array(16));
-    
     postStatus('Menurunkan kunci dari password (PBKDF2)...');
     key = await deriveKey(password, salt, 'encrypt');
-    
     b64SaltOrKey = bufferToBase64URL(salt.buffer);
   } else {
     prefix = 'K';
@@ -41,7 +38,6 @@ const handleEncrypt = async (payload: {
       true,
       ['encrypt']
     );
-
     const exportedKey = await crypto.subtle.exportKey('raw', key);
     b64SaltOrKey = bufferToBase64URL(exportedKey);
   }
@@ -50,7 +46,7 @@ const handleEncrypt = async (payload: {
   const encryptedBuffer = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: iv },
     key,
-    fileBuffer
+    fileBuffer as ArrayBuffer
   );
 
   postStatus('Encoding metadata...');
@@ -65,7 +61,7 @@ const handleEncrypt = async (payload: {
 
   postStatus('Menggabungkan data...');
   const combinedCode = `${prefix}:${b64Filename}.${b64FileType}.${b64SaltOrKey}.${b64Iv}.${b64Data}`;
-  
+
   return { code: combinedCode };
 };
 
@@ -74,7 +70,6 @@ const handleDecrypt = async (payload: {
   password: string;
 }) => {
   const { inputCode, password } = payload;
-
   let type: 'P' | 'K' = 'P';
   let dataString = inputCode;
 
@@ -103,7 +98,7 @@ const handleDecrypt = async (payload: {
     }
     postStatus('Menurunkan kunci dari password (PBKDF2)...');
     const saltBuffer = base64URLToBuffer(b64SaltOrKey);
-    key = await deriveKey(password, new Uint8Array(saltBuffer), 'decrypt');
+    key = await deriveKey(password, new Uint8Array(saltBuffer as ArrayBuffer), 'decrypt');
   } else {
     if (password) {
       postStatus("Info: Password diabaikan (file ini tidak terproteksi).");
@@ -112,7 +107,7 @@ const handleDecrypt = async (payload: {
     const keyBuffer = base64URLToBuffer(b64SaltOrKey);
     key = await crypto.subtle.importKey(
       'raw',
-      keyBuffer,
+      keyBuffer as ArrayBuffer,
       { name: 'AES-GCM' },
       false,
       ['decrypt']
@@ -125,11 +120,11 @@ const handleDecrypt = async (payload: {
 
   postStatus('Mendekripsi file (AES-GCM)...');
   const decryptedBuffer = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: new Uint8Array(ivBuffer) },
+    { name: 'AES-GCM', iv: new Uint8Array(ivBuffer as ArrayBuffer) },
     key,
-    dataBuffer
+    dataBuffer as ArrayBuffer
   );
-  
+
   postStatus('Decoding metadata file...');
   const filename = new TextDecoder().decode(base64URLToBuffer(b64Filename));
   const fileType = new TextDecoder().decode(base64URLToBuffer(b64FileType));
@@ -137,18 +132,14 @@ const handleDecrypt = async (payload: {
   return { decryptedBuffer, filename, fileType };
 };
 
-
 self.onmessage = async (event: MessageEvent) => {
   const { action, payload } = event.data;
-
   try {
     if (action === 'encrypt') {
       const result = await handleEncrypt(payload);
       self.postMessage({ type: 'success', action: 'encrypt', payload: result });
-    
     } else if (action === 'decrypt') {
       const result = await handleDecrypt(payload);
-      
       self.postMessage(
         { type: 'success', action: 'decrypt', payload: result },
         [result.decryptedBuffer]

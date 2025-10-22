@@ -1,5 +1,4 @@
 'use client';
-
 export const bufferToBase64URL = (buffer: ArrayBuffer) => {
   const bytes = new Uint8Array(buffer);
   const len = bytes.byteLength;

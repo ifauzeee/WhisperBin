@@ -1,111 +1,105 @@
 # WhisperBin 🤫
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%F%2F%2Fgithub.com%2Fifauzeee%2FWhisperBin)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fifauzeee%2FWhisperBin)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Tech Stack: Next.js](https://img.shields.io/badge/tech-Next.js-black?logo=nextdotjs)](https://nextjs.org/)
 
-Encrypt and share files or text with absolute privacy. **WhisperBin** is a tool that runs 100% in your browser. Your data **never** leaves your device.
+Encrypt and share files or text with complete privacy. **WhisperBin** runs entirely in your browser—your data never leaves your device.
 
-### [➡️ Try it Live (Live Demo) ⬅️](https://whisper-bin.vercel.app/)
+### [➡️ Try the Live Demo ⬅️](https://whisper-bin.vercel.app/)
 
 ---
 
 <p align="center">
-  <img src="https://via.placeholder.com/1200x600.png?text=Replace+me+with+a+Screenshot+or+GIF+demo!" alt="WhisperBin Demo">
+  <img src="app/img/image.png" alt="WhisperBin Demo">
 </p>
 
-## 🚀 Key Features
+## 🚀 Features
 
-* **Secure In-Browser Encryption:** Encrypt files or text using modern cryptographic standards (AES-GCM) right on your device.
-* **Flexible Security Modes:**
-    * [cite_start]**Password Protected (Prefix `P:`):** Uses your password to generate a strong encryption key via PBKDF2 (100,000 iterations) [cite: 207, 214-215].
-    * **Passwordless (Prefix `K:`):** Creates a random key and embeds it in the output code. [cite_start]Ideal for quickly "scrambling" data [cite: 216-218].
-* **Large File Handling:** Bypasses mobile clipboard limits by allowing you to **download** the encrypted code as a `.txt` file and **import** it back for decryption.
-* **File Integrity Checker:** Verify files with an SHA-256 hash calculator tool (which also runs 100% in-browser).
-* **Modern Interface:** A smooth, responsive UI with animations powered by GSAP.
-
----
-
-## 🛡️ Your Data Never Leaves Your Device
-
-This isn't a promise; it's an architectural constraint. Your security is our first priority.
-
-* **100% Client-Side**
-    All processes—encryption, decryption, and hashing—happen inside your browser using the standard [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API). [cite_start]Your file is never uploaded to any server [cite: 52-53].
-
-* **No Server, No Database**
-    This application has no backend or database. [cite_start]We do not store your files, text, or passwords [cite: 54-56]. Once you close the browser tab, that sensitive data is gone.
-
-* **Completely Open Source**
-    The entire project code is open to the public. [cite_start]You or anyone can inspect every line of code to verify that we never transmit or store your data [cite: 57-58].
+- **Client-Side Encryption:** Securely encrypt files or text using AES-GCM directly in your browser.
+- **Two Encryption Modes:**
+  - **Password Protected (`P:`)** — Uses PBKDF2 with 100,000 iterations to derive a strong key from your password.
+  - **Passwordless (`K:`)** — Generates a random key and embeds it in the output for quick scrambling.
+- **Large File Support:** Download encrypted output as `.txt` to bypass clipboard limits and re-import for decryption.
+- **Integrity Checker:** Verify files using a built-in SHA-256 hash calculator.
+- **Modern UI:** Responsive interface with smooth GSAP-powered animations.
 
 ---
 
-## ⚙️ How It Works (Technical Details)
+## 🛡️ Privacy by Design
 
-The application runs in two distinct modes, identifiable by the output code prefix.
+This isn’t just a promise—it’s enforced by architecture.
 
-### 1. `P:` Mode (Password Protected)
+- **100% Client-Side:** All encryption, decryption, and hashing are handled via the [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API). No data is sent to any server.
+- **No Backend, No Database:** WhisperBin stores nothing. Once you close the tab, your data is gone.
+- **Open Source:** Every line of code is publicly available for inspection and verification.
 
-This is the most secure mode, ideal for protecting sensitive data.
+---
 
-1.  **Input:** You provide a file/text and a password.
-2.  **Salt:** A random 16-byte cryptographic `salt` is created.
-3.  **Key Derivation:** Your password and the `salt` are processed via **PBKDF2** with **100,000 iterations** and **SHA-256** to generate a secure 256-bit encryption key.
-4.  **Encryption:** Your data is encrypted using **AES-GCM** with a random 12-byte `iv`.
-5.  **Output (`P:`):** The output code is a Base64URL concatenation of:
-    `P:<filename>.<filetype>.<salt>.<iv>.<encrypted_data>`.
+## ⚙️ How It Works
 
-### 2. `K:` Mode (Passwordless)
+WhisperBin uses two encryption modes, each with a distinct output prefix:
 
-This mode is faster and useful if you just want to "scramble" data so it can't be read directly.
+### 🔐 `P:` Mode — Password Protected
 
-1.  **Input:** You provide a file/text (no password).
-2.  **Random Key:** Instead of PBKDF2, we directly create a strong, random 256-bit AES-GCM `CryptoKey`.
-3.  **Encryption:** Your data is encrypted using that random key and a random 12-byte `iv`.
-4.  [cite_start]**Output (`K:`):** The random key is exported as raw data and combined into the output [cite: 217-218]:
-    `K:<filename>.<filetype>.<raw_key>.<iv>.<encrypted_data>`.
+1. You provide a file or text and a password.
+2. A random 16-byte salt is generated.
+3. PBKDF2 derives a 256-bit key using SHA-256 and 100,000 iterations.
+4. AES-GCM encrypts the data with a random 12-byte IV.
+5. Output format:
+   ```
+   P:<filename>.<filetype>.<salt>.<iv>.<encrypted_data>
+   ```
+
+### 🔓 `K:` Mode — Passwordless
+
+1. You provide a file or text (no password required).
+2. A random 256-bit AES-GCM key is generated.
+3. AES-GCM encrypts the data with a random 12-byte IV.
+4. Output format:
+   ```
+   K:<filename>.<filetype>.<raw_key>.<iv>.<encrypted_data>
+   ```
 
 ---
 
 ## 🛠️ Tech Stack
 
-* **Framework:** [Next.js](https://nextjs.org/) (App Router)
-* **Language:** [TypeScript](https://www.typescriptlang.org/)
-* **Styling:** [Tailwind CSS](https://tailwindcss.com/)
-* **Cryptography:** [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) (running in a Web Worker)
-* **Animation:** [GSAP (GreenSock Animation Platform)](https://gsap.com/)
-* **UI:** [React](https://reactjs.org/)
-* **Icons:** [Lucide React](https://lucide.dev/)
-* **Password Validation:** [zxcvbn](https://github.com/dropbox/zxcvbn)
+- **Framework:** [Next.js](https://nextjs.org/) (App Router)
+- **Language:** [TypeScript](https://www.typescriptlang.org/)
+- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+- **Crypto:** [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) (via Web Worker)
+- **Animation:** [GSAP](https://gsap.com/)
+- **UI Library:** [React](https://reactjs.org/)
+- **Icons:** [Lucide React](https://lucide.dev/)
+- **Password Strength:** [zxcvbn](https://github.com/dropbox/zxcvbn)
 
 ---
 
-## 🏁 Getting Started (Local Development)
+## 🏁 Getting Started
 
-Interested in running this project locally or contributing?
+To run locally:
 
-1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/ifauzeee/WhisperBin.git]
-    cd WhisperBin
-    ```
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/ifauzeee/WhisperBin.git
+   cd WhisperBin
+   ```
 
-2.  **Install dependencies:**
-    ```bash
-    pnpm install
-    # or
-    npm install
-    # or
-    yarn install
-    ```
+2. Install dependencies:
+   ```bash
+   pnpm install
+   # or
+   npm install
+   # or
+   yarn install
+   ```
 
-3.  **Run the development server:**
-    ```bash
-    pnpm run dev
-    ```
+3. Start the development server:
+   ```bash
+   pnpm run dev
+   ```
 
-4.  Open [http://localhost:3000] in your browser to see the result.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
-

@@ -1,9 +1,5 @@
 # WhisperBin 🤫
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fifauzeee%2FWhisperBin)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Tech Stack: Next.js](https://img.shields.io/badge/tech-Next.js-black?logo=nextdotjs)](https://nextjs.org/)
-
 Encrypt and share files or text with complete privacy. **WhisperBin** runs entirely in your browser—your data never leaves your device.
 
 ### [➡️ Try the Live Demo ⬅️](https://whisper-bin.vercel.app/)

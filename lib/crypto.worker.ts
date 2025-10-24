@@ -42,25 +42,31 @@ const handleEncrypt = async (payload: {
     b64SaltOrKey = bufferToBase64URL(exportedKey);
   }
 
+  postStatus('Mempersiapkan metadata terenkripsi...');
+  const meta = { name: filename, type: fileType };
+  const metaBuffer = new TextEncoder().encode(JSON.stringify(meta));
+  const metaLengthBuffer = new Uint32Array([metaBuffer.byteLength]).buffer;
+
+  const combinedBuffer = new Uint8Array(
+    metaLengthBuffer.byteLength + metaBuffer.byteLength + fileBuffer.byteLength
+  );
+  combinedBuffer.set(new Uint8Array(metaLengthBuffer), 0);
+  combinedBuffer.set(new Uint8Array(metaBuffer), 4);
+  combinedBuffer.set(new Uint8Array(fileBuffer), 4 + metaBuffer.byteLength);
+
   postStatus('Mengenkripsi data (AES-GCM)...');
   const encryptedBuffer = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: iv },
     key,
-    fileBuffer as ArrayBuffer
+    combinedBuffer.buffer
   );
 
-  postStatus('Encoding metadata...');
-  const filenameBuffer = new TextEncoder().encode(filename);
-  const fileTypeBuffer = new TextEncoder().encode(fileType);
-
   postStatus('Mengonversi ke Base64 URL Safe...');
-  const b64Filename = bufferToBase64URL(filenameBuffer.buffer);
-  const b64FileType = bufferToBase64URL(fileTypeBuffer.buffer);
   const b64Iv = bufferToBase64URL(iv.buffer);
   const b64Data = bufferToBase64URL(encryptedBuffer);
 
   postStatus('Menggabungkan data...');
-  const combinedCode = `${prefix}:${b64Filename}.${b64FileType}.${b64SaltOrKey}.${b64Iv}.${b64Data}`;
+  const combinedCode = `${prefix}:${b64SaltOrKey}.${b64Iv}.${b64Data}`;
 
   return { code: combinedCode };
 };
@@ -77,31 +83,59 @@ const handleDecrypt = async (payload: {
     const parts = inputCode.split(':', 2);
     type = parts[0] as 'P' | 'K';
     dataString = parts[1];
-    postStatus(`Mendeteksi format: ${type === 'P' ? 'Dilindungi Password' : 'Kunci Tersemat'}`);
+    postStatus(
+      `Mendeteksi format: ${
+        type === 'P' ? 'Dilindungi Password' : 'Kunci Tersemat'
+      }`
+    );
   } else {
     postStatus('Mendeteksi format lama (Dilindungi Password)...');
   }
 
   postStatus('Mem-parsing kode Base64...');
   const dataParts = dataString.split('.');
-  if (dataParts.length !== 5) {
-    throw new Error('Format kode tidak valid (harus 5 bagian).');
-  }
 
-  const [b64Filename, b64FileType, b64SaltOrKey, b64Iv, b64Data] = dataParts;
+  let b64SaltOrKey: string,
+    b64Iv: string,
+    b64Data: string;
+  let b64Filename_legacy: string | undefined,
+    b64FileType_legacy: string | undefined;
+  let isLegacyFormat = false;
+
+  if (dataParts.length === 3) {
+    [b64SaltOrKey, b64Iv, b64Data] = dataParts;
+    isLegacyFormat = false;
+    postStatus('Mendeteksi format aman (metadata terenkripsi)...');
+  } else if (dataParts.length === 5) {
+    [
+      b64Filename_legacy,
+      b64FileType_legacy,
+      b64SaltOrKey,
+      b64Iv,
+      b64Data,
+    ] = dataParts;
+    isLegacyFormat = true;
+    postStatus('Mendeteksi format lama (metadata terlihat)...');
+  } else {
+    throw new Error('Format kode tidak valid (harus 3 atau 5 bagian).');
+  }
 
   let key: CryptoKey;
 
   if (type === 'P') {
     if (!password) {
-      throw new Error("Password dibutuhkan untuk mendekripsi file ini.");
+      throw new Error('Password dibutuhkan untuk mendekripsi file ini.');
     }
     postStatus('Menurunkan kunci dari password (PBKDF2)...');
     const saltBuffer = base64URLToBuffer(b64SaltOrKey);
-    key = await deriveKey(password, new Uint8Array(saltBuffer as ArrayBuffer), 'decrypt');
+    key = await deriveKey(
+      password,
+      new Uint8Array(saltBuffer as ArrayBuffer),
+      'decrypt'
+    );
   } else {
     if (password) {
-      postStatus("Info: Password diabaikan (file ini tidak terproteksi).");
+      postStatus('Info: Password diabaikan (file ini tidak terproteksi).');
     }
     postStatus('Membaca kunci tersemat...');
     const keyBuffer = base64URLToBuffer(b64SaltOrKey);
@@ -126,10 +160,29 @@ const handleDecrypt = async (payload: {
   );
 
   postStatus('Decoding metadata file...');
-  const filename = new TextDecoder().decode(base64URLToBuffer(b64Filename));
-  const fileType = new TextDecoder().decode(base64URLToBuffer(b64FileType));
+  let filename: string;
+  let fileType: string;
+  let finalFileBuffer: ArrayBuffer;
 
-  return { decryptedBuffer, filename, fileType };
+  if (isLegacyFormat && b64Filename_legacy && b64FileType_legacy) {
+    filename = new TextDecoder().decode(base64URLToBuffer(b64Filename_legacy));
+    fileType = new TextDecoder().decode(base64URLToBuffer(b64FileType_legacy));
+    finalFileBuffer = decryptedBuffer;
+  } else {
+    const metaLengthView = new Uint32Array(decryptedBuffer.slice(0, 4));
+    const metaLength = metaLengthView[0];
+
+    const metaBuffer = decryptedBuffer.slice(4, 4 + metaLength);
+    const metaString = new TextDecoder().decode(metaBuffer);
+    const meta = JSON.parse(metaString);
+
+    filename = meta.name;
+    fileType = meta.type;
+
+    finalFileBuffer = decryptedBuffer.slice(4 + metaLength);
+  }
+
+  return { decryptedBuffer: finalFileBuffer, filename, fileType };
 };
 
 self.onmessage = async (event: MessageEvent) => {
@@ -147,6 +200,10 @@ self.onmessage = async (event: MessageEvent) => {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Worker error';
-    self.postMessage({ type: 'error', message });
+    if (message.toLowerCase().includes('decrypt') || message.toLowerCase().includes('key')) {
+        self.postMessage({ type: 'error', message: 'Dekripsi gagal. Kemungkinan password salah atau data korup.' });
+    } else {
+        self.postMessage({ type: 'error', message });
+    }
   }
 };

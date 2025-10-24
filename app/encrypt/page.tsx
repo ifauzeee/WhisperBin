@@ -17,10 +17,15 @@ import {
   Download,
   QrCode,
   X,
+  FileCheck,
+  Link as LinkIcon,
 } from 'lucide-react';
 import zxcvbn from 'zxcvbn';
 import JSZip from 'jszip';
 import QRCode from 'qrcode';
+import * as pako from 'pako';
+import { bufferToBase64URL } from '../../lib/crypto';
+import { calculateSHA256 } from '../../lib/hash';
 
 type StatusType = 'idle' | 'loading' | 'success' | 'error';
 type EncryptType = 'file' | 'text';
@@ -41,8 +46,9 @@ export default function EncryptPage() {
   const workerRef = useRef<Worker | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
-
   const [isDragging, setIsDragging] = useState(false);
+  const [originalFileHash, setOriginalFileHash] = useState('');
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
 
   useEffect(() => {
     workerRef.current = new Worker(
@@ -159,6 +165,50 @@ export default function EncryptPage() {
       });
   };
 
+  const handleCopyShareLink = async () => {
+    if (!outputCode || isGeneratingLink) return;
+
+    if (outputCode.length > 3000) {
+      setStatusText(
+        'ERROR: Teks terlalu panjang untuk "Share Link". Gunakan "Download .txt".'
+      );
+      setStatusType('error');
+      return;
+    }
+
+    setIsGeneratingLink(true);
+    setStatusText('Membuat "Share Link"...');
+    try {
+      const compressedU8Array = pako.deflate(outputCode);
+      const compressedBase64URL = bufferToBase64URL(compressedU8Array.buffer);
+
+      const shareLink = `${window.location.origin}/decrypt#data=${compressedBase64URL}`;
+
+      if (shareLink.length > 4000) {
+        setStatusText(
+          'ERROR: Link yang dihasilkan terlalu panjang. Gunakan "Download .txt".'
+        );
+        setStatusType('error');
+        setIsGeneratingLink(false);
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareLink);
+
+      setStatusText('"Share Link" disalin ke clipboard!');
+      setStatusType('success');
+      setShowCopyAlert(true);
+      setTimeout(() => {
+        setShowCopyAlert(false);
+      }, 2000);
+    } catch (err) {
+      console.error('Gagal membuat share link:', err);
+      setStatusText('ERROR: Gagal membuat "Share Link".');
+      setStatusType('error');
+    }
+    setIsGeneratingLink(false);
+  };
+
   const handleShowQR = async () => {
     if (!outputCode) return;
     if (outputCode.length > 2500) {
@@ -228,7 +278,6 @@ export default function EncryptPage() {
           files.forEach((file) => {
             zip.file(file.name, file);
           });
-
           const zipBlob = await zip.generateAsync({
             type: 'blob',
             compression: 'DEFLATE',
@@ -236,7 +285,6 @@ export default function EncryptPage() {
               level: 6,
             },
           });
-
           fileBuffer = await zipBlob.arrayBuffer();
           filename = 'archive.zip';
           fileType = 'application/zip';
@@ -289,21 +337,42 @@ export default function EncryptPage() {
     setIsDragging(false);
   };
 
+  const handleFilesSelected = (selectedFiles: File[]) => {
+    if (selectedFiles.length > 0) {
+      setFiles(selectedFiles);
+      setEncryptType('file');
+      setOriginalFileHash('');
+      if (selectedFiles.length === 1) {
+        (async () => {
+          try {
+            setStatusText('Menghitung hash file...');
+            const hash = await calculateSHA256(selectedFiles[0], setStatusText);
+            setOriginalFileHash(hash);
+            setStatusText('File dipilih dan hash dihitung. Siap enkripsi.');
+            setStatusType('idle');
+          } catch (e) {
+            console.error('Kalkulasi hash gagal', e);
+            setStatusText('File dipilih, tapi kalkulasi hash gagal.');
+          }
+        })();
+      } else {
+        setStatusText(
+          `${selectedFiles.length} file dipilih. Siap enkripsi.`
+        );
+      }
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const droppedFiles = Array.from(e.dataTransfer.files);
-    if (droppedFiles.length > 0) {
-      setFiles(droppedFiles);
-      setEncryptType('file');
-    }
+    handleFilesSelected(droppedFiles);
   };
 
   const handleFileClick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
-    if (selectedFiles.length > 0) {
-      setFiles(selectedFiles);
-    }
+    handleFilesSelected(selectedFiles);
   };
 
   return (
@@ -388,6 +457,17 @@ export default function EncryptPage() {
                   multiple
                   onChange={handleFileClick}
                 />
+                {originalFileHash && (
+                  <div className="mt-4 p-4 bg-gray-800 border border-gray-700 rounded-lg space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+                      <FileCheck className="w-4 h-4 text-blue-400" />
+                      SHA-256 Hash (File Asli)
+                    </label>
+                    <p className="font-mono text-xs text-gray-400 break-all">
+                      {originalFileHash}
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
@@ -526,6 +606,14 @@ export default function EncryptPage() {
                       ) : (
                         <Copy className="w-5 h-5 text-gray-300" />
                       )}
+                    </button>
+                    <button
+                      onClick={handleCopyShareLink}
+                      title="Salin Share Link"
+                      className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+                      disabled={isGeneratingLink}
+                    >
+                      <LinkIcon className="w-5 h-5 text-gray-300" />
                     </button>
                     {downloadUrl && (
                       <a

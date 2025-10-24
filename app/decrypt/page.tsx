@@ -14,7 +14,13 @@ import {
   FileUp,
   ShieldCheck,
   ShieldOff,
+  Copy,
+  FileCheck,
 } from 'lucide-react';
+import * as pako from 'pako';
+import { base64URLToBuffer } from '../../lib/crypto';
+import { calculateSHA256 } from '../../lib/hash';
+
 type StatusType = 'idle' | 'loading' | 'success' | 'error';
 
 interface PreviewData {
@@ -30,13 +36,14 @@ export default function DecryptPage() {
   const [statusType, setStatusType] = useState<StatusType>('idle');
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [decryptedText, setDecryptedText] = useState<string | null>(null);
-
   const [isPasswordRequired, setIsPasswordRequired] = useState<boolean | null>(
     null
   );
-
   const workerRef = useRef<Worker | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [decryptedFileHash, setDecryptedFileHash] = useState('');
+  const [showHashCopyAlert, setShowHashCopyAlert] = useState(false);
 
   useEffect(() => {
     workerRef.current = new Worker(
@@ -50,7 +57,21 @@ export default function DecryptPage() {
         setStatusText(message);
       } else if (type === 'success' && action === 'decrypt') {
         const { decryptedBuffer, filename, fileType } = payload;
+        
+        setDecryptedFileHash('');
 
+        const blob = new Blob([decryptedBuffer], { type: fileType });
+        const decryptedFile = new File([blob], filename, { type: fileType });
+
+        (async () => {
+          try {
+            const hash = await calculateSHA256(decryptedFile, () => {});
+            setDecryptedFileHash(hash);
+          } catch (e) {
+            console.error('Kalkulasi hash gagal', e);
+          }
+        })();
+        
         if (fileType === 'text/plain') {
           const text = new TextDecoder().decode(decryptedBuffer);
           setDecryptedText(text);
@@ -59,9 +80,7 @@ export default function DecryptPage() {
           );
           setStatusType('success');
         } else {
-          const blob = new Blob([decryptedBuffer], { type: fileType });
           const downloadUrl = URL.createObjectURL(blob);
-
           setPreviewData({
             url: downloadUrl,
             name: filename,
@@ -77,6 +96,30 @@ export default function DecryptPage() {
         setStatusType('error');
       }
     };
+
+    if (window.location.hash.startsWith('#data=')) {
+      setStatusText('Mendeteksi data dari URL...');
+      setStatusType('loading');
+      try {
+        const compressedBase64URL = window.location.hash.substring(6);
+        const compressedBuffer = base64URLToBuffer(compressedBase64URL);
+        const decompressedU8Array = pako.inflate(
+          new Uint8Array(compressedBuffer)
+        );
+        const decompressedCode = new TextDecoder().decode(decompressedU8Array);
+
+        handleCodeChange(decompressedCode);
+        setStatusText(
+          'Data dari URL berhasil dimuat. Masukkan password jika perlu.'
+        );
+        setStatusType('idle');
+      } catch (e) {
+        console.error('Gagal mem-parsing hash URL', e);
+        setStatusText('ERROR: Gagal membaca data dari URL. Kode mungkin korup.');
+        setStatusType('error');
+      }
+      window.location.hash = '';
+    }
 
     return () => {
       workerRef.current?.terminate();
@@ -138,7 +181,6 @@ export default function DecryptPage() {
   const handleCodeChange = (code: string) => {
     setInputCode(code);
     const trimmedCode = code.trim();
-
     if (trimmedCode.startsWith('P:')) {
       setIsPasswordRequired(true);
       setStatusText('Deteksi: Mode Password (P:). Masukkan password.');
@@ -148,7 +190,6 @@ export default function DecryptPage() {
       setStatusText('Deteksi: Mode Tanpa Password (K:). Siap didekripsi.');
       setStatusType('idle');
     } else if (trimmedCode.length > 5 && !trimmedCode.includes(':')) {
-      // Dukungan format lama
       setIsPasswordRequired(true);
       setStatusText(
         'Deteksi: Mode Password (Format Lama). Masukkan password.'
@@ -197,6 +238,41 @@ export default function DecryptPage() {
       },
     });
   };
+
+  const copyHashToClipboard = () => {
+    if (!decryptedFileHash || showHashCopyAlert) return;
+    navigator.clipboard.writeText(decryptedFileHash);
+    setShowHashCopyAlert(true);
+    setTimeout(() => {
+      setShowHashCopyAlert(false);
+    }, 2000);
+  };
+
+  const HashDisplay = () =>
+    decryptedFileHash ? (
+      <div className="mt-4 p-4 bg-gray-800 border border-gray-700 rounded-lg space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+            <FileCheck className="w-4 h-4 text-green-400" />
+            SHA-256 Hash (Hasil Dekripsi)
+          </label>
+          <button
+            onClick={copyHashToClipboard}
+            title="Salin Hash"
+            className="p-1 bg-gray-700 rounded-lg hover:bg-gray-600"
+          >
+            {showHashCopyAlert ? (
+              <Check className="w-4 h-4 text-green-400" />
+            ) : (
+              <Copy className="w-4 h-4 text-gray-300" />
+            )}
+          </button>
+        </div>
+        <p className="font-mono text-xs text-gray-400 break-all">
+          {decryptedFileHash}
+        </p>
+      </div>
+    ) : null;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -327,6 +403,7 @@ export default function DecryptPage() {
                   value={decryptedText}
                   className="w-full flex-grow h-96 p-3 rounded-lg bg-gray-800 border border-gray-700 font-mono text-sm text-gray-300 focus:outline-none"
                 />
+                <HashDisplay />
               </div>
             ) : previewData ? (
               <div className="w-full h-full min-h-[500px] flex flex-col space-y-4 rounded-lg bg-gray-900 border border-gray-700 p-4">
@@ -358,6 +435,7 @@ export default function DecryptPage() {
                     Tipe: {previewData.type || 'tidak diketahui'}
                   </p>
                 </div>
+                <HashDisplay />
                 <a
                   href={previewData.url}
                   download={previewData.name}

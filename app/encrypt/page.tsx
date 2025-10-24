@@ -37,12 +37,12 @@ export default function EncryptPage() {
   const [statusType, setStatusType] = useState<StatusType>('idle');
   const [outputCode, setOutputCode] = useState('');
   const [showCopyAlert, setShowCopyAlert] = useState(false);
-
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const workerRef = useRef<Worker | null>(null);
-
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
+
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     workerRef.current = new Worker(
@@ -161,7 +161,6 @@ export default function EncryptPage() {
 
   const handleShowQR = async () => {
     if (!outputCode) return;
-
     if (outputCode.length > 2500) {
       setStatusText(
         'ERROR: Teks terlalu panjang untuk dibuatkan QR Code. Harap perpendek.'
@@ -272,12 +271,39 @@ export default function EncryptPage() {
 
   const getFileLabel = () => {
     if (files.length === 0) {
-      return 'Klik untuk memilih file (bisa lebih dari 1)...';
+      return 'Klik atau Drop file di sini (bisa lebih dari 1)...';
     }
     if (files.length === 1) {
       return files[0].name;
     }
     return `${files.length} file dipilih`;
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 0) {
+      setFiles(droppedFiles);
+      setEncryptType('file');
+    }
+  };
+
+  const handleFileClick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length > 0) {
+      setFiles(selectedFiles);
+    }
   };
 
   return (
@@ -341,7 +367,14 @@ export default function EncryptPage() {
                 </label>
                 <label
                   htmlFor="file-upload"
-                  className="w-full flex items-center gap-3 px-6 py-5 bg-gray-800 border-2 border-dashed border-gray-700 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-gray-700/50 transition-colors"
+                  className={`w-full flex items-center gap-3 px-6 py-5 bg-gray-800 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                    isDragging
+                      ? 'border-blue-500 bg-blue-900/30'
+                      : 'border-gray-700 hover:border-blue-500'
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                 >
                   <FileUp className="w-6 h-6 text-blue-400" />
                   <span className="text-lg text-gray-300 truncate">
@@ -353,9 +386,7 @@ export default function EncryptPage() {
                   type="file"
                   className="hidden"
                   multiple
-                  onChange={(e) =>
-                    setFiles(Array.from(e.target.files || []))
-                  }
+                  onChange={handleFileClick}
                 />
               </div>
             ) : (
@@ -464,7 +495,6 @@ export default function EncryptPage() {
             >
               Kode Base64 Dihasilkan
             </label>
-
             <div className="relative w-full h-full flex-grow">
               {!outputCode && (
                 <div className="w-full h-full min-h-[500px] flex items-center justify-center rounded-lg bg-gray-800/50 border border-dashed border-gray-700">
@@ -476,7 +506,6 @@ export default function EncryptPage() {
                   </div>
                 </div>
               )}
-
               {outputCode && (
                 <div className="relative w-full h-full">
                   <textarea
@@ -485,7 +514,6 @@ export default function EncryptPage() {
                     value={outputCode}
                     className="w-full h-full min-h-[500px] p-4 rounded-lg bg-gray-900 border border-gray-700 font-mono text-xs text-gray-300 focus:outline-none"
                   />
-
                   <div className="absolute top-4 right-4 flex flex-col gap-3">
                     <button
                       onClick={copyToClipboard}
@@ -499,7 +527,6 @@ export default function EncryptPage() {
                         <Copy className="w-5 h-5 text-gray-300" />
                       )}
                     </button>
-
                     {downloadUrl && (
                       <a
                         href={downloadUrl}
@@ -510,7 +537,6 @@ export default function EncryptPage() {
                         <Download className="w-5 h-5 text-gray-300" />
                       </a>
                     )}
-
                     {encryptType === 'text' && (
                       <button
                         onClick={handleShowQR}
@@ -521,7 +547,6 @@ export default function EncryptPage() {
                       </button>
                     )}
                   </div>
-
                   {showCopyAlert && (
                     <div className="absolute top-16 right-4 px-3 py-1 bg-green-600 text-white text-sm rounded-md shadow-lg">
                       Disalin!

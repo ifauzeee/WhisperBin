@@ -1,3 +1,4 @@
+// /app/tools/hash-check/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -12,6 +13,8 @@ import {
 } from 'lucide-react';
 
 type StatusType = 'idle' | 'loading' | 'success' | 'error';
+
+const LARGE_FILE_THRESHOLD = 1 * 1024 * 1024 * 1024; // 1 GB
 
 export default function HashCheckPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -57,6 +60,14 @@ export default function HashCheckPage() {
   const handleCalculateHash = async () => {
     if (!file) {
       setStatusText('ERROR: File cannot be empty.');
+      setStatusType('error');
+      return;
+    }
+
+    if (file.size > LARGE_FILE_THRESHOLD) {
+      setStatusText(
+        'ERROR: File > 1GB. Browser might crash. Process aborted.'
+      );
       setStatusType('error');
       return;
     }

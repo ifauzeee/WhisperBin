@@ -30,12 +30,16 @@ import { calculateSHA256 } from '../../lib/hash';
 type StatusType = 'idle' | 'loading' | 'success' | 'error';
 type EncryptType = 'file' | 'text';
 
+const LARGE_FILE_THRESHOLD = 1 * 1024 * 1024 * 1024; // 1 GB
+
 export default function EncryptPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [textInput, setTextInput] = useState('');
   const [encryptType, setEncryptType] = useState<EncryptType>('file');
   const [usePassword, setUsePassword] = useState(true);
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   const [passwordScore, setPasswordScore] = useState(0);
   const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Menunggu file dan password...');
@@ -62,9 +66,7 @@ export default function EncryptPage() {
         setStatusText(message);
       } else if (type === 'success' && action === 'encrypt') {
         setOutputCode(payload.code);
-        setStatusText(
-          'Enkripsi berhasil! Salin kode atau download file .txt.'
-        );
+        setStatusText('Enkripsi berhasil! Salin kode atau download file .txt.');
         setStatusType('success');
 
         try {
@@ -234,6 +236,7 @@ export default function EncryptPage() {
   };
 
   const handleEncrypt = async () => {
+    // Pengecekan input dasar
     if (
       (encryptType === 'file' && files.length === 0) ||
       (encryptType === 'text' && !textInput)
@@ -242,12 +245,31 @@ export default function EncryptPage() {
       setStatusType('error');
       return;
     }
+
+    // Pengecekan konfirmasi password
     if (usePassword && !password) {
       setStatusText(
         'ERROR: Password tidak boleh kosong jika proteksi diaktifkan.'
       );
       setStatusType('error');
       return;
+    }
+    if (usePassword && password !== confirmPassword) {
+      setStatusText('ERROR: Password dan Konfirmasi Password tidak cocok.');
+      setStatusType('error');
+      return;
+    }
+
+    // Pengecekan ukuran file sebelum enkripsi
+    if (encryptType === 'file' && files.length > 0) {
+      const totalSize = files.reduce((acc, file) => acc + file.size, 0);
+      if (totalSize > LARGE_FILE_THRESHOLD) {
+        setStatusText(
+          'ERROR: Total file > 1GB. Browser mungkin akan crash. Proses dibatalkan.'
+        );
+        setStatusType('error');
+        return;
+      }
     }
 
     setStatusType('loading');
@@ -342,23 +364,30 @@ export default function EncryptPage() {
       setFiles(selectedFiles);
       setEncryptType('file');
       setOriginalFileHash('');
+
       if (selectedFiles.length === 1) {
-        (async () => {
-          try {
-            setStatusText('Menghitung hash file...');
-            const hash = await calculateSHA256(selectedFiles[0], setStatusText);
-            setOriginalFileHash(hash);
-            setStatusText('File dipilih dan hash dihitung. Siap enkripsi.');
-            setStatusType('idle');
-          } catch (e) {
-            console.error('Kalkulasi hash gagal', e);
-            setStatusText('File dipilih, tapi kalkulasi hash gagal.');
-          }
-        })();
+        const file = selectedFiles[0];
+        if (file.size > LARGE_FILE_THRESHOLD) {
+          setStatusText(
+            'Info: File > 1GB, hash file asli dilewati (terlalu besar).'
+          );
+          setStatusType('idle');
+        } else {
+          (async () => {
+            try {
+              setStatusText('Menghitung hash file...');
+              const hash = await calculateSHA256(file, setStatusText);
+              setOriginalFileHash(hash);
+              setStatusText('File dipilih dan hash dihitung. Siap enkripsi.');
+              setStatusType('idle');
+            } catch (e) {
+              console.error('Kalkulasi hash gagal', e);
+              setStatusText('File dipilih, tapi kalkulasi hash gagal.');
+            }
+          })();
+        }
       } else {
-        setStatusText(
-          `${selectedFiles.length} file dipilih. Siap enkripsi.`
-        );
+        setStatusText(`${selectedFiles.length} file dipilih. Siap enkripsi.`);
       }
     }
   };
@@ -518,6 +547,19 @@ export default function EncryptPage() {
                       placeholder="Masukkan password yang kuat..."
                     />
                   </div>
+
+                  <div className="relative">
+                    <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <input
+                      id="password-confirm"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full pl-14 pr-6 py-4 bg-gray-800 border border-gray-700 rounded-lg text-lg focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
+                      placeholder="Konfirmasi password Anda..."
+                    />
+                  </div>
+
                   {password.length > 0 && (
                     <div className="space-y-2">
                       <div className="w-full bg-gray-700 rounded-full h-2">

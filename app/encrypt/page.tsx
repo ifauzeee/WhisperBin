@@ -20,8 +20,7 @@ import {
   FileCheck,
   Link as LinkIcon,
 } from 'lucide-react';
-import zxcvbn from 'zxcvbn';
-import JSZip from 'jszip';
+// Hapus import statis zxcvbn dan jszip
 import QRCode from 'qrcode';
 import * as pako from 'pako';
 import { bufferToBase64URL } from '../../lib/crypto';
@@ -39,7 +38,6 @@ export default function EncryptPage() {
   const [usePassword, setUsePassword] = useState(true);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
   const [passwordScore, setPasswordScore] = useState(0);
   const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Menunggu file dan password...');
@@ -66,7 +64,9 @@ export default function EncryptPage() {
         setStatusText(message);
       } else if (type === 'success' && action === 'encrypt') {
         setOutputCode(payload.code);
-        setStatusText('Enkripsi berhasil! Salin kode atau download file .txt.');
+        setStatusText(
+          'Enkripsi berhasil! Salin kode atau download file .txt.'
+        );
         setStatusType('success');
 
         try {
@@ -113,9 +113,14 @@ export default function EncryptPage() {
     }
   };
 
-  const handlePasswordChange = (pass: string) => {
+  /**
+   * Menghitung skor password secara dinamis menggunakan dynamic import zxcvbn.
+   * @param pass Password yang diinput.
+   */
+  const handlePasswordChange = async (pass: string) => {
     setPassword(pass);
     if (pass.length > 0) {
+      const zxcvbn = (await import('zxcvbn')).default;
       const result = zxcvbn(pass);
       setPasswordScore(result.score);
       setPasswordFeedback(result.feedback.warning || null);
@@ -235,8 +240,10 @@ export default function EncryptPage() {
     }
   };
 
+  /**
+   * Menangani proses enkripsi, termasuk dynamic import JSZip untuk multiple file.
+   */
   const handleEncrypt = async () => {
-    // Pengecekan input dasar
     if (
       (encryptType === 'file' && files.length === 0) ||
       (encryptType === 'text' && !textInput)
@@ -246,7 +253,6 @@ export default function EncryptPage() {
       return;
     }
 
-    // Pengecekan konfirmasi password
     if (usePassword && !password) {
       setStatusText(
         'ERROR: Password tidak boleh kosong jika proteksi diaktifkan.'
@@ -260,7 +266,6 @@ export default function EncryptPage() {
       return;
     }
 
-    // Pengecekan ukuran file sebelum enkripsi
     if (encryptType === 'file' && files.length > 0) {
       const totalSize = files.reduce((acc, file) => acc + file.size, 0);
       if (totalSize > LARGE_FILE_THRESHOLD) {
@@ -296,6 +301,8 @@ export default function EncryptPage() {
           setStatusText(
             `Mengompres ${files.length} file menjadi archive.zip...`
           );
+          // Dynamic import JSZip
+          const JSZip = (await import('jszip')).default;
           const zip = new JSZip();
           files.forEach((file) => {
             zip.file(file.name, file);
@@ -542,6 +549,7 @@ export default function EncryptPage() {
                       id="password-enc"
                       type="password"
                       value={password}
+                      // Memanggil fungsi async
                       onChange={(e) => handlePasswordChange(e.target.value)}
                       className="w-full pl-14 pr-6 py-4 bg-gray-800 border border-gray-700 rounded-lg text-lg focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
                       placeholder="Masukkan password yang kuat..."
